@@ -36,7 +36,7 @@ A fully automated Raspberry Pi 5 home server setup. One script gets you a comple
 - USB-C power supply (5V 5A / 25W — the official Pi 5 supply is strongly recommended; underpowered supplies cause random reboots)
 - Ethernet or WiFi connection
 
-> ⚠️ **Storage tip:** SD cards wear out faster than SSDs under constant Docker writes. For a long-running server, consider booting from a USB SSD or NVMe HAT instead of SD card.
+> ⚠️ **Storage tip:** SD cards wear out faster than SSDs under constant Docker writes. For a long-running server, consider booting from a USB SSD or NVMe HAT instead of SD card. See the [SD to SSD migration guide](docs/migrate-to-ssd.md) to move your setup across with zero reinstallation.
 
 ### Software (on your PC/Mac)
 - [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
@@ -76,7 +76,7 @@ ssh yourusername@homelab.local
 
 The first time you connect it will ask you to confirm the host fingerprint — type `yes` and press Enter.
 
-> 💡 **If `homelab.local` doesn’t resolve:** Check your router’s connected devices list for your Pi’s IP address and SSH using the IP directly: `ssh yourusername@192.168.x.x`
+> 💡 **If `homelab.local` doesn't resolve:** Check your router's connected devices list for your Pi's IP address and SSH using the IP directly: `ssh yourusername@192.168.x.x`
 
 ### Step 3 — Run the setup script
 
@@ -102,7 +102,7 @@ Once the script finishes, open your browser and go to:
 http://homelab.local:3005
 ```
 
-or using your Pi’s IP:
+or using your Pi's IP:
 
 ```
 http://YOUR_PI_IP:3005
@@ -111,6 +111,8 @@ http://YOUR_PI_IP:3005
 This is your **central dashboard** — it has clickable tiles for every service so you never need to remember ports again. Bookmark this page.
 
 > 💡 **Homepage troubleshooting:** If you see a "Host validation failed" error, the `HOMEPAGE_ALLOWED_HOSTS` environment variable needs to include your exact hostname and IP. The setup script handles this automatically, but if you set it up manually make sure it contains both `homelab.local:3005` and `YOUR_PI_IP:3005` with **no spaces** around the comma.
+>
+> If you want to access Homepage over Tailscale, also add your Tailscale IP: `100.x.x.x:3005`
 
 ---
 
@@ -135,8 +137,8 @@ This is your **central dashboard** — it has clickable tiles for every service 
 Tailscale creates a secure private network between your devices — no port forwarding, no exposed ports, no public IP needed.
 
 ### Why Tailscale?
-- Works through **Starlink and CGNAT** (which don’t give you a real public IP, making traditional VPNs like WireGuard difficult to set up)
-- Zero config — install and authenticate, that’s it
+- Works through **Starlink and CGNAT** (which don't give you a real public IP, making traditional VPNs like WireGuard difficult to set up)
+- Zero config — install and authenticate, that's it
 - End-to-end encrypted
 - Free tier supports up to 100 devices
 - Works on iOS, Android, Windows, Mac, Linux
@@ -156,7 +158,7 @@ Open the URL it gives you, sign in with Google/GitHub/Microsoft, and your Pi wil
 2. Sign in with the same account
 3. Your Pi will appear in the device list
 
-**Find your Pi’s Tailscale IP:**
+**Find your Pi's Tailscale IP:**
 ```bash
 tailscale ip -4
 ```
@@ -167,6 +169,23 @@ This gives you a `100.x.x.x` address. Use this to access your homelab from anywh
 http://100.x.x.x:3005   — Homepage dashboard from anywhere in the world
 http://100.x.x.x:8123   — Home Assistant remotely
 http://100.x.x.x:5678   — n8n remotely
+```
+
+**Add your Tailscale IP to Homepage allowed hosts:**
+
+After getting your Tailscale IP, update your compose file:
+```bash
+nano ~/homelab/docker-compose.yml
+```
+
+Find `HOMEPAGE_ALLOWED_HOSTS` and add your Tailscale IP with no spaces around the comma:
+```yaml
+- HOMEPAGE_ALLOWED_HOSTS=homelab.local:3005,192.168.x.x:3005,100.x.x.x:3005
+```
+
+Then redeploy:
+```bash
+cd ~/homelab && docker compose up -d homepage
 ```
 
 ### Check Tailscale status
@@ -182,10 +201,10 @@ Pi-hole blocks ads, trackers, and malware domains for **every device on your net
 
 ### Enable network-wide blocking
 
-1. Find your Pi’s IP: `hostname -I`
+1. Find your Pi's IP: `hostname -I`
 2. Log into your router admin page (usually `192.168.0.1` or `192.168.1.1`)
 3. Find DNS settings (under LAN, DHCP, or Advanced settings depending on your router)
-4. Set **Primary DNS** to your Pi’s IP address
+4. Set **Primary DNS** to your Pi's IP address
 5. Save and restart your router
 
 All devices will now use Pi-hole automatically without any changes on each device.
@@ -216,6 +235,14 @@ Then open **Open WebUI** from your Homepage dashboard or at `http://homelab.loca
 | `llama3.1:8b` | ~4.7GB | Slow | More capable but slower on Pi |
 
 > ⚠️ 7B+ models run at 1–2 tokens/second on Pi 5 — usable but slow. 3B models run at 4–8 tokens/second which feels reasonable. The 8GB RAM is the key advantage here.
+
+---
+
+## 💾 Migrating from SD Card to SSD
+
+Running on SD card but want better reliability and performance? You can clone your entire running setup — all containers, volumes, config, and data — to an SSD with no reinstallation required.
+
+See the full guide: **[docs/migrate-to-ssd.md](docs/migrate-to-ssd.md)**
 
 ---
 
@@ -262,7 +289,7 @@ cd ~/homelab && docker compose pull && docker compose up -d
 ```
 
 ### Homepage shows "Host validation failed"
-Homepage requires the `HOMEPAGE_ALLOWED_HOSTS` environment variable to include the exact host:port you’re accessing it from.
+Homepage requires the `HOMEPAGE_ALLOWED_HOSTS` environment variable to include the exact host:port you're accessing it from.
 ```yaml
 environment:
   - HOMEPAGE_ALLOWED_HOSTS=homelab.local:3005,192.168.x.x:3005
@@ -282,23 +309,23 @@ image: portainer/portainer-ce:2.21.5-alpine
 
 ### SSH connection refused on first boot
 - Wait longer — first boot takes 2–3 minutes (Pi restarts once while expanding filesystem)
-- Check your router for the Pi’s IP and SSH directly to the IP instead of the hostname
+- Check your router for the Pi's IP and SSH directly to the IP instead of the hostname
 - Verify WiFi credentials were saved correctly in the imager
 
 ### Pi reboots repeatedly
 - **Power supply** — most common cause. Pi 5 needs a genuine 25W supply. Phone chargers cause random reboots.
 - **SD card quality** — cheap cards fail under Docker write loads. Use SanDisk Extreme or better.
-- **SD card filesystem corruption** — if you see `EXT4-fs error: bad block bitmap checksum` in `sudo dmesg`, your SD card has bad blocks. Reflash or switch to USB SSD.
+- **SD card filesystem corruption** — if you see `EXT4-fs error: bad block bitmap checksum` in `sudo dmesg`, your SD card has bad blocks. Reflash or switch to USB SSD — see [migrate-to-ssd.md](docs/migrate-to-ssd.md).
 
 ### Vaultwarden shows "You are not using a secure context"
 Vaultwarden requires HTTPS to function. Set up Nginx Proxy Manager with a proxy host pointing to Vaultwarden and enable SSL before using it.
 
 ### `.local` hostname not resolving on Windows
-Windows mDNS can be unreliable. Use the Pi’s direct IP address instead:
+Windows mDNS can be unreliable. Use the Pi's direct IP address instead:
 ```powershell
 ssh yourusername@192.168.x.x
 ```
-Find the IP from your router’s connected devices list.
+Find the IP from your router's connected devices list.
 
 ---
 
@@ -312,7 +339,8 @@ pi-homelab/
 │   └── homepage/
 │       └── services.yaml         # Homepage dashboard config
 ├── docs/
-│   └── manual-setup.md           # Step-by-step manual setup guide
+│   ├── manual-setup.md           # Step-by-step manual setup guide
+│   └── migrate-to-ssd.md         # Clone SD card setup to SSD
 └── README.md
 ```
 
@@ -392,6 +420,7 @@ This project uses the following open source projects:
 - [Watchtower](https://github.com/containrrr/watchtower) — Apache 2.0 License
 - [Tailscale](https://tailscale.com) — BSD 3-Clause License
 - [Netdata](https://github.com/netdata/netdata) — GPL-3.0 License
+- [rpi-clone](https://github.com/billw2/rpi-clone) — GPL-2.0 License
 
 ---
 
