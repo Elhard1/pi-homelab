@@ -33,6 +33,23 @@ skip() {
   echo -e "${GREEN}[SKIP] $1 already complete${NC}"
 }
 
+# Run docker commands — uses sudo if user not yet in docker group
+docker_cmd() {
+  if groups | grep -q docker; then
+    docker "$@"
+  else
+    sudo docker "$@"
+  fi
+}
+
+docker_compose_cmd() {
+  if groups | grep -q docker; then
+    docker compose "$@"
+  else
+    sudo docker compose "$@"
+  fi
+}
+
 # Install figlet for banner rendering
 sudo apt-get install -y figlet > /dev/null 2>&1
 
@@ -58,13 +75,11 @@ fi
 read -p "Enter your hostname (default: homelab): " HOSTNAME
 HOSTNAME=${HOSTNAME:-homelab}
 
-# Only ask for passwords if steps that need them aren't done yet
-if ! step_done "PIHOLE" || ! step_done "N8N"; then
-  read -s -p "Enter Pi-hole admin password: " PIHOLE_PASSWORD
-  echo ""
-  read -s -p "Enter n8n admin password: " N8N_PASSWORD
-  echo ""
-fi
+read -s -p "Enter Pi-hole admin password: " PIHOLE_PASSWORD
+echo ""
+
+read -s -p "Enter n8n admin password: " N8N_PASSWORD
+echo ""
 
 # Get local IP
 LOCAL_IP=$(hostname -I | awk '{print $1}')
@@ -105,6 +120,10 @@ else
 EOF
   sudo systemctl restart docker
   sleep 3
+
+  # Activate docker group for this session without requiring logout
+  # All subsequent docker commands in this script will use sudo
+  # to work around the group not being active yet
   mark_done "STEP2"
   echo -e "${GREEN}Docker installed successfully${NC}"
 fi
@@ -376,8 +395,6 @@ fi
 
 # =============================================================
 # STEP 7 — CONFIGURE HOMEPAGE DASHBOARD
-# Note: Using sudo docker because usermod group change requires
-# a new login session to take effect — sudo bypasses this.
 # =============================================================
 
 if step_done "STEP7"; then
@@ -461,6 +478,14 @@ if step_done "STEP8"; then
 else
   echo -e "\n${YELLOW}[8/9] Pulling and starting all services (this may take a while)...${NC}"
   cd ~/homelab && sudo docker compose pull && sudo docker compose up -d
+
+  # Verify containers came up
+  echo -e "\n${YELLOW}Verifying containers...${NC}"
+  sleep 5
+  RUNNING=$(sudo docker ps --format "{{.Names}}" | wc -l)
+  echo -e "${GREEN}${RUNNING} containers running${NC}"
+  sudo docker ps --format "table {{.Names}}\t{{.Status}}"
+
   mark_done "STEP8"
 fi
 
@@ -496,7 +521,7 @@ echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Bookmark http://${LOCAL_IP}:3005 as your homelab dashboard"
 echo "  2. Set up Nginx Proxy Manager at http://${LOCAL_IP}:81 (create your own credentials on first login)"
 echo "  3. Point your router DNS to ${LOCAL_IP} to enable Pi-hole network-wide"
-echo "  4. Pull an AI model: sudo docker exec -it ollama ollama pull llama3.2"
+echo "  4. Pull an AI model: docker exec -it ollama ollama pull llama3.2"
 echo "  5. Log out and back in so you can run docker without sudo"
 echo "  6. Tailscale IP for remote access: $(tailscale ip -4 2>/dev/null || echo 'run: tailscale ip -4')"
 echo ""
